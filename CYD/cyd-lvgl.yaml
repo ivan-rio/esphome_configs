@@ -4,7 +4,6 @@ substitutions:
   COLOR_1: "0x23f337"
   COLOR_2: "0x2b9a36"
   
-
 esphome:
   name: cyd-lvgl
   friendly_name: CYD_LVGL
