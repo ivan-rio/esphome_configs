@@ -189,11 +189,6 @@ font:
     size: 15
     bpp: 4
 
-  - file: "fonts/Rio_font.ttf"
-    id: rfont
-    size: 42
-    bpp: 4
-
 time:
   - platform: sntp
     id: sntp_time
@@ -292,14 +287,6 @@ lvgl:
           arc_width: 5
           arc_opa: 100%
           arc_rounded: true
-        widgets:
-          - label:
-              align: CENTER
-              text: 'R'
-              text_font: rfont
-              text_color: WHITE
-              translate_x: 2
-              translate_y: 4
 
     - obj:
         id: wattage_bg
