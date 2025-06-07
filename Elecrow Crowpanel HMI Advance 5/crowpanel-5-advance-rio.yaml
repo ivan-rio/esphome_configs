@@ -1,0 +1,572 @@
+substitutions:
+  BRIGHTNESS: "80"
+  THERMOSTAT_ENTITY: climate.termostat
+  COLOR_1: "0x23f337"
+  COLOR_2: "0x2b9a36"
+
+esphome:
+  name: crowpanel-5
+  friendly_name: CrowPanel 5
+  platformio_options:
+    build_flags: "-DBOARD_HAS_PSRAM"
+    board_build.esp-idf.memory_type: qio_opi
+    board_build.flash_mode: dio
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+
+psram:
+  mode: octal
+  speed: 80MHz 
+
+logger:
+
+api:
+
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Advance-Hmi-43-Led"
+    password: "ce1wfZSuEaZS"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+output:
+  - platform: ledc
+    pin: 2
+    frequency: 1220
+    id: backlight_pwm
+
+switch:
+  - platform: gpio
+    name: "PCF9554A Pin #1"
+    pin:
+      pca9554: pca9557_device
+      number: 1
+      mode:
+        output: true
+      inverted: true
+
+sensor:
+  - platform: homeassistant
+    id: watt_power
+    entity_id: sensor.breaker_phase_a_power
+    accuracy_decimals: 1
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: watt_label
+            text:
+              format: "%.0fW"
+              args: [ 'x' ]
+
+  - platform: homeassistant
+    id: thermostat_set
+    entity_id: $THERMOSTAT_ENTITY
+    attribute: temperature
+    unit_of_measurement: "°C"
+    on_value:
+      - lvgl.label.update:
+          id: temp_set
+          text:
+            format: "%.1f°C"
+            args: [ 'x' ]
+
+
+  - platform: homeassistant
+    id: voltage_sensor
+    entity_id: sensor.voltage_corrected
+    unit_of_measurement: "V"
+    on_value:
+      - lvgl.indicator.update:
+          id: volt_needle
+          value: !lambda "return x;"
+      - lvgl.label.update:
+          id: gauge_label
+          text:
+            format: "%.0fV"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: charger_sensor
+    entity_id: sensor.obksmartplug05_power
+    unit_of_measurement: "W"
+    on_value:
+      - lvgl.bar.update:
+          id: charger_bar
+          value: !lambda |-
+            if(x==0) {
+              return 0;
+            } else {
+              return 100-(x*1.84);
+            }      
+
+  - platform: homeassistant
+    id: thermostat_now
+    entity_id: $THERMOSTAT_ENTITY
+    attribute: current_temperature
+    unit_of_measurement: "°C"
+    on_value:
+      - lvgl.label.update:
+          id: temp_now
+          text:
+            format: "%.1f°C"
+            args: [ 'x' ]
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display Backlight
+    id: backlight
+    restore_mode: ALWAYS_ON
+
+i2c:
+  sda: 15
+  scl: 16
+  scan: true
+
+pca9554:
+  - id: 'pca9557_device'
+    address: 0x18
+
+touchscreen:
+  platform: gt911
+
+display:
+  - platform: rpi_dpi_rgb
+    id: main_display
+    color_order: RGB
+    invert_colors: true
+    update_interval: never
+    auto_clear_enabled: false
+    dimensions:
+      width: 800
+      height: 480
+    de_pin: 42
+    hsync_pin: 40
+    vsync_pin: 41
+    pclk_pin: 39
+    pclk_frequency: 20MHz
+    hsync_pulse_width: 4
+    hsync_front_porch: 8
+    hsync_back_porch: 8
+    vsync_pulse_width: 4
+    vsync_front_porch: 8
+    vsync_back_porch: 8
+    data_pins:
+      red:
+        - 7
+        - 17
+        - 18
+        - 3
+        - 46
+      green:
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+      blue:
+        - 21
+        - 47
+        - 48
+        - 45
+        - 38
+
+font:
+  - file: "fonts/BebasNeue-Regular.ttf"
+    id: font_1
+    size: 100
+    bpp: 4
+
+  - file: "fonts/BebasNeue-Regular.ttf"
+    id: font_2
+    size: 80
+    bpp: 4
+
+  - file: "fonts/BebasNeue-Regular.ttf"
+    id: font_3
+    size: 60
+    bpp: 4
+
+  - file: "fonts/BebasNeue-Regular.ttf"
+    id: font_4
+    size: 40
+    bpp: 4
+
+  - file: "fonts/BebasNeue-Regular.ttf"
+    id: font_5
+    size: 30
+    bpp: 4
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Kyiv
+    on_time:
+      - cron: '* * * * * *'
+        then:
+          - script.execute: time_update
+
+script:
+  - id: time_update
+    then:
+      - lvgl.label.update:
+          id: local_time
+          text: !lambda |-
+            char buff[10] = "-";
+            auto time = id(sntp_time).now();
+            if (time.is_valid())
+              sprintf(buff, "%02d:%02d", time.hour, time.minute);
+            return buff;
+      - lvgl.bar.update:
+          id: bar_seconds
+          value: !lambda |-
+            auto time = id(sntp_time).now();
+            if (time.is_valid())
+              return time.second;
+
+lvgl:
+  #log_level: INFO
+  color_depth: 16
+  bg_color: 0x000000
+  scrollbar_mode: "OFF"
+  scrollable: false
+  widgets:
+    - obj:
+        id: main_bg
+        bg_color: $COLOR_1
+        bg_opa: 100%
+        bg_grad_color: $COLOR_2
+        bg_main_stop: 0
+        bg_grad_stop: 0
+        bg_grad_dir: VER
+        border_width: 0
+        width: 800
+        height: 480
+        align: CENTER
+
+    - obj:
+        id: bgfill
+        width: 772
+        height: 452
+        align: CENTER
+        bg_color: 0x101010
+        bg_opa: 100%
+        border_width: 0
+
+    - label:
+        align: TOP_LEFT
+        id: local_time
+        text: "--:--"
+        height: 112
+        text_font: font_1
+        text_color: WHITE
+        translate_x: 20
+        translate_y: 14
+        widgets:
+          - bar:
+              align: BOTTOM_LEFT
+              translate_x: 14
+              id: bar_seconds
+              height: 10
+              width: 156
+              min_value: 0
+              max_value: 60
+              mode: NORMAL
+              value: 30
+              bg_color: 0x292929
+              bg_opa: 100%
+              indicator:
+                bg_color: $COLOR_1
+                bg_opa: 100%
+
+    - spinner:
+        id: spinner
+        align: TOP_RIGHT
+        x: -30
+        y: 26
+        width: 100
+        height: 100
+        arc_length: 120deg
+        spin_time: 3s
+        arc_color: 0x292929
+        arc_width: 10
+        arc_rounded: true
+        indicator:
+          arc_color: $COLOR_1
+          arc_width: 10
+          arc_opa: 100%
+          arc_rounded: true
+
+    - obj:
+        scrollbar_mode: "OFF"
+        scrollable: false
+        id: wattage_bg
+        width: 250
+        height: 100
+        x: 30
+        y: 28
+        align: TOP_MID
+        radius: 6
+        bg_color: 0xFFFFFF
+        bg_opa: 100%
+        border_width: 0
+        widgets:
+          - obj:
+              scrollable: false
+              scrollbar_mode: "OFF"
+              x: -10
+              y: -10
+              width: 20
+              height: 20
+              radius: 10
+              align: TOP_LEFT
+              bg_color: 0x2C2C2C
+          - obj:
+              scrollable: false
+              scrollbar_mode: "OFF"
+              x: 10
+              y: -10
+              width: 20
+              height: 20
+              radius: 10
+              align: TOP_RIGHT
+              bg_color: 0x2C2C2C
+          - obj:
+              scrollable: false
+              scrollbar_mode: "OFF"
+              x: 10
+              y: 10
+              width: 20
+              height: 20
+              radius: 10
+              align: BOTTOM_RIGHT
+              bg_color: 0x2C2C2C
+          - obj:
+              scrollable: false
+              scrollbar_mode: "OFF"
+              x: -10
+              y: 10
+              width: 20
+              height: 20
+              radius: 10
+              align: BOTTOM_LEFT
+              bg_color: 0x2C2C2C
+          - label:
+              id: watt_label
+              #x: -6
+              y: 4
+              align: CENTER
+              text_align: CENTER
+              text: "----W"
+              text_font: font_2
+              text_color: 0x101010
+
+    - obj:
+        width: 268
+        height: 180
+        x: -154
+        y: 16
+        align: CENTER
+        radius: 16
+        bg_color: $COLOR_1
+        bg_grad_color: $COLOR_2
+        bg_grad_dir: VER
+        border_width: 0
+        scrollable: false
+        scrollbar_mode: "OFF"
+        widgets:
+          - label:
+              y: 0
+              align: TOP_MID
+              text: "TEPMOCTAT"
+              text_color: 0xFFFFFF
+              text_font: font_3
+              radius: 12
+              bg_color: 0x101010
+              bg_opa: 100%
+              pad_left: 14
+              pad_right: 14
+              pad_top: 6
+          - button:
+              width: 60
+              height: 60
+              x: 0
+              y: 4
+              align: BOTTOM_LEFT
+              radius: 40
+              bg_color: 0xFFFFFF
+              widgets:
+                - label:
+                    align: CENTER
+                    x: 0
+                    y: 4
+                    text: "-"
+                    text_color: 0x101010
+                    text_font: font_3
+              on_click:
+                - homeassistant.service:
+                    service: climate.set_temperature
+                    data:
+                      entity_id: $THERMOSTAT_ENTITY
+                    data_template:
+                      temperature: '{{ my_variable }}'
+                    variables:
+                      my_variable: |-
+                        return id(thermostat_set).state - 0.5;
+          - button:
+              width: 60
+              height: 60
+              x: 0
+              y: 4
+              align: BOTTOM_RIGHT
+              radius: 40
+              bg_color: 0xFFFFFF
+              widgets:
+                - label:
+                    align: CENTER
+                    x: 0
+                    y: 4
+                    text: "+"
+                    text_color: 0x101010
+                    text_font: font_3
+              on_click:
+                - homeassistant.service:
+                    service: climate.set_temperature
+                    data:
+                      entity_id: $THERMOSTAT_ENTITY
+                    data_template:
+                      temperature: '{{ my_variable }}'
+                    variables:
+                      my_variable: |-
+                        return id(thermostat_set).state + 0.5;
+          - label:
+              id: temp_now
+              y: -16
+              align: BOTTOM_MID
+              text: "--.-"
+              text_color: 0x101010
+              text_font: font_4
+          - label:
+              id: temp_set
+              y: 12
+              align: BOTTOM_MID
+              text: "--.-"
+              text_color: 0x101010
+              text_font: font_5
+
+    - slider:
+        id: bright_slider
+        value: ${BRIGHTNESS}
+        width: 572
+        height: 30
+        x: 0
+        y: -52
+        align: BOTTOM_MID
+        bg_color: 0x292929
+        indicator:
+          bg_color: $COLOR_1
+          bg_grad_color: $COLOR_2
+          bg_grad_dir: HOR
+        knob:
+          bg_color: 0xFFFFFF
+        on_release:
+          - light.turn_on:
+              id: backlight
+              brightness: !lambda return float(x)/100;
+
+    - meter:
+        width: 180
+        height: 180
+        align: RIGHT_MID
+        x: -136
+        y: 18
+        scales:
+          range_from: 190
+          range_to: 260
+          angle_range: 240
+          rotation: 150
+          ticks:
+            count: 25
+            length: 35
+            width: 10
+          indicators:
+            - line:
+                id: volt_needle
+                width: 5
+                color: 0x101010
+                r_mod: -4
+            - tick_style:
+                start_value: 190
+                end_value: 260
+                color_start: $COLOR_2
+                color_end: $COLOR_1
+        widgets:
+          - label:
+              id: gauge_label
+              align: CENTER
+              y: 52
+              text: "---V"
+              text_font: font_4
+              text_color: 0x101010
+
+    - obj:
+        scrollbar_mode: "OFF"
+        scrollable: false
+        width: 36
+        height: 20
+        x: -56
+        y: -44
+        align: RIGHT_MID
+        radius: 6
+        bg_color: 0x292929
+        border_width: 0
+
+    - obj:
+        scrollbar_mode: "OFF"
+        scrollable: false
+        width: 76
+        height: 124
+        x: -36
+        y: 20
+        align: RIGHT_MID
+        radius: 8
+        bg_color: 0x292929
+        border_width: 0
+        widgets:
+          - bar:
+              id: charger_bar
+              width: 60
+              height: 108
+              align: CENTER
+              radius: 6
+              bg_color: 0x101010
+              min_value: 0
+              max_value: 100
+              value: 20
+              indicator:
+                radius: 6
+                bg_color: $COLOR_1
+                bg_opa: 100%
+              on_click:
+                - homeassistant.action:
+                    action: switch.toggle
+                    data:
+                      entity_id: switch.obksmartplug05_0
