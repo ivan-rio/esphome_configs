@@ -1,0 +1,80 @@
+esphome:
+  name: epaper
+  friendly_name: epaper
+  on_boot:
+    then:
+      - switch.turn_on: epd_power
+      - delay: 1s
+      - lambda: id(epaper_display).update();
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Epaper Fallback Hotspot"
+
+captive_portal:
+
+web_server:
+  port: 80 
+    
+font:
+  - file: 'fonts/BebasNeue Regular.ttf'
+    id: font1
+    size: 80
+
+spi:
+  clk_pin: 12
+  mosi_pin: 11
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Kyiv
+
+
+display:
+  - platform: waveshare_epaper
+    cs_pin: 45
+    dc_pin: 46
+    busy_pin: 48
+    reset_pin: 47
+    model: gdey042t81 
+    id: epaper_display
+    update_interval: 10s
+    full_update_every: 6
+    lambda: |-
+      if (id(sntp_time).now().is_valid()) {
+        if(id(sntp_time).now().second == 00) { 
+          id(epaper_display).update();
+        }
+        int time_x = it.get_width()/2;
+        int time_y = it.get_height()/2;
+        it.printf(time_x, time_y-20, id(font1), TextAlign::CENTER,
+                "%02d:%02d", 
+                id(sntp_time).now().hour, id(sntp_time).now().minute);
+        it.filled_rectangle(5, 170, id(sntp_time).now().second*6.5, 24);
+      }
+
+switch:
+  - platform: gpio
+    pin: 7
+    id: epd_power
+    name: "EPD Power"
+    restore_mode: ALWAYS_ON

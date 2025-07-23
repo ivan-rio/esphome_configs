@@ -1,0 +1,203 @@
+esphome:
+  name: crowpanel-epaper-42inch
+  on_boot:
+    then:
+      - switch.turn_on: epd_power
+      - delay: 1s
+      - lambda: id(epaper_display).update();
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "E-Paper Fallback Hotspot"
+
+captive_portal:
+
+web_server:
+  port: 80 
+    
+font:
+  - file: 'fonts/BebasNeue Regular.ttf'
+    id: font1
+    size: 110
+
+  - file: 'fonts/BebasNeue Regular.ttf'
+    id: font2
+    size: 40
+
+  - file: 'fonts/BebasNeue Regular.ttf'
+    id: font3
+    size: 25
+
+  - file: 'fonts/BebasNeue Regular.ttf'
+    id: font_temp
+    size: 35
+
+  - file: 'fonts/Roboto_Condensed-Medium.ttf'
+    id: font4
+    size: 25
+
+  - file: 'fonts/Roboto_Condensed-Bold.ttf'
+    id: font5
+    size: 16
+
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: weather_font
+    size: 54
+    glyphs: ['󰖔', '󰖐', '󰖑', '󰖒', '󰖓', '󰙾', '󰖕', '󰖖', '󰖗', '󰖘', '󰙿', '󰖙', '󰖝', '󰋖']
+
+spi:
+  clk_pin: 12
+  mosi_pin: 11
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Kyiv
+
+image:
+  - file: "images/e-paper-bg.png"
+    type: binary
+    id: background
+    invert_alpha: true
+
+display:
+  - platform: waveshare_epaper
+    cs_pin: 45
+    dc_pin: 46
+    busy_pin: 48
+    reset_pin: 47
+    model: gdey042t81 
+    id: epaper_display
+    update_interval: 10s
+    full_update_every: 6
+    rotation: 270
+    lambda: |-
+      int center_x = 150;
+      int center_y = 200;
+
+      it.image(0, 0, id(background));
+
+      if (id(sntp_time).now().is_valid()) {
+        it.printf(center_x, 10, id(font1), TextAlign::TOP_CENTER,
+                "%02d:%02d", 
+                id(sntp_time).now().hour, id(sntp_time).now().minute);
+        it.strftime(center_x, 110, id(font2), TextAlign::TOP_CENTER, "%b %d ", id(sntp_time).now());
+      }
+
+      //it.printf(center_x-15, center_y-30, id(font3), TextAlign::TOP_RIGHT, "%s", id(weather).state.c_str());
+
+      std::string weather_now = id(weather).state;
+      #define icon_x 135
+      #define icon_y 162
+      if (weather_now == "clear-night") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖔"); 
+      } else if (weather_now == "cloudy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖐"); 
+      } else if (weather_now == "exceptional") {
+        it.print(icon_x, icon_y + 30, id(weather_font), TextAlign::BASELINE_RIGHT, "󰋖"); 
+      } else if (weather_now == "fog") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖑"); 
+      } else if (weather_now == "hail") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖒"); 
+      } else if (weather_now == "lightning") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖓"); 
+      } else if (weather_now == "lightning-rainy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰙾"); 
+      } else if (weather_now == "partlycloudy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖕"); 
+      } else if (weather_now == "pouring") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖖"); 
+      } else if (weather_now == "rainy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖗"); 
+      } else if (weather_now == "snowy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖘"); 
+      } else if (weather_now == "snowy-rainy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰙿"); 
+      } else if (weather_now == "sunny") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖙"); 
+      } else if (weather_now == "windy") {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰖝"); 
+      } else {
+        it.print(icon_x, icon_y + 35, id(weather_font), TextAlign::BASELINE_RIGHT, "󰋖"); 
+      }
+
+      it.printf(center_x+15, center_y-38, id(font_temp), TextAlign::TOP_LEFT, "%.1f °C", id(weather_temp).state);
+      
+      it.printf(center_x-23, center_y+46, id(font2), TextAlign::TOP_LEFT, "%.f W", id(watt_power).state);
+
+      it.printf(110, 345, id(font4), TextAlign::CENTER_RIGHT, "%.0f", id(ha_temp).state);
+      it.printf(260, 346, id(font4), TextAlign::CENTER_RIGHT, "%.0f", id(nas_temp).state);
+
+      it.printf(285, 324, id(font5), TextAlign::CENTER_RIGHT, "%.0fGB", id(nas_free).state);
+
+      it.printf(103, 372, id(font5), TextAlign::CENTER_LEFT, "%.0f%%", id(ha_cpu).state);
+      it.printf(253, 373, id(font5), TextAlign::CENTER_LEFT, "%.0f%%", id(nas_cpu).state);
+
+      if(id(air_alarm).state) {
+        it.print(268, center_y, id(font1), TextAlign::TOP_CENTER, "!!!");
+      }
+         
+switch:
+  - platform: gpio
+    pin: 7
+    id: epd_power
+    name: "EPD Power"
+    restore_mode: ALWAYS_ON
+
+sensor:
+  - platform: homeassistant
+    id: watt_power
+    entity_id: sensor.breaker_phase_a_power
+
+  - platform: homeassistant
+    id: weather_temp
+    entity_id: weather.golovna
+    attribute: temperature
+
+  - platform: homeassistant
+    id: ha_temp
+    entity_id: sensor.cpu_temp
+
+  - platform: homeassistant
+    id: ha_cpu
+    entity_id: sensor.cpu
+
+  - platform: homeassistant
+    id: nas_temp
+    entity_id: sensor.nas_cpu_temp
+
+  - platform: homeassistant
+    id: nas_cpu
+    entity_id: sensor.nas_cpu_load_senor
+
+  - platform: homeassistant
+    id: nas_free
+    entity_id: sensor.nas_free_space
+    
+binary_sensor:
+  - platform: homeassistant
+    entity_id: binary_sensor.kyiv_air
+    id: air_alarm
+
+text_sensor:
+  - platform: homeassistant
+    id: weather
+    entity_id: weather.golovna
